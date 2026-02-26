@@ -6,23 +6,37 @@
   <title>TikTok GO メンバーシップ見込みステータス</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 24px; }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; max-width: 980px; }
+    :root { --border:#e6e6e6; --muted:#666; --err:#b00020; }
+
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; margin: 18px; }
+    h2 { margin: 0 0 14px; font-size: 26px; line-height: 1.25; }
+    .card { border: 1px solid var(--border); border-radius: 14px; padding: 14px; max-width: 980px; background:#fff; }
     .row { margin: 10px 0; }
-    .muted { color: #666; font-size: 12px; line-height: 1.6; }
-    .err { color: #b00020; white-space: pre-wrap; }
-    .kv { display: grid; grid-template-columns: 360px 1fr; gap: 10px 14px; margin-top: 12px; }
-    .k { font-weight: 600; color: #333; }
+    .muted { color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .err { color: var(--err); white-space: pre-wrap; }
+
+    /* 2カラム（PC/タブレット） */
+    .kv { display: grid; grid-template-columns: minmax(180px, 320px) 1fr; gap: 10px 14px; margin-top: 12px; align-items: start; }
+    .k { font-weight: 700; color: #222; }
+    .v { color:#111; }
+    .v, .k { word-break: break-word; overflow-wrap: anywhere; }
+
     a.btn {
-      display: inline-block;
-      padding: 10px 14px;
-      border: 1px solid #ddd;
-      border-radius: 10px;
-      text-decoration: none;
-      color: #111;
-      background: #fff;
+      display: inline-block; padding: 10px 14px;
+      border: 1px solid var(--border); border-radius: 12px;
+      text-decoration: none; color: #111; background: #fff;
     }
     a#link { display:none; }
+
+    /* モバイルは1カラム（ラベル→値を縦並び） */
+    @media (max-width: 640px) {
+      body { margin: 14px; }
+      h2 { font-size: 22px; }
+      .card { padding: 12px; }
+      .kv { grid-template-columns: 1fr; gap: 6px; }
+      .k { margin-top: 10px; }
+      .k:first-child { margin-top: 0; }
+    }
   </style>
 </head>
 <body>
@@ -37,23 +51,23 @@
     <!-- 正常表示 -->
     <div id="content" style="display:none;">
       <div class="row kv">
-        <div class="k">Email</div><div id="email"></div>
-        <div class="k">アカウント名</div><div id="account"></div>
-        <div class="k">GMV（メンバーシップ計算対象の販売総額）</div><div id="gmv"></div>
-        <div class="k">投稿数（メンバーシップ計算対象）</div><div id="postNumber"></div>
-        <div class="k">販売レベル</div><div id="salesLevel"></div>
-        <div class="k">販売総額順位（同一セールスレベル内）</div><div id="salesRank"></div>
-        <div class="k">次回獲得見込みメンバーシップ</div><div id="nextMembership"></div>
-        <div class="k">データ更新日（JST）</div><div id="updated"></div>
-        <div class="k">備考</div><div id="note"></div>
+        <div class="k">Email</div><div class="v" id="email"></div>
+        <div class="k">アカウント名</div><div class="v" id="account"></div>
+        <div class="k">GMV（メンバーシップ計算対象の販売総額）</div><div class="v" id="gmv"></div>
+        <div class="k">投稿数（メンバーシップ計算対象）</div><div class="v" id="postNumber"></div>
+        <div class="k">販売レベル</div><div class="v" id="salesLevel"></div>
+        <div class="k">販売総額順位（同一セールスレベル内）</div><div class="v" id="salesRank"></div>
+        <div class="k">次回獲得見込みメンバーシップ</div><div class="v" id="nextMembership"></div>
+        <div class="k">データ更新日（JST）</div><div class="v" id="updated"></div>
+        <div class="k">備考</div><div class="v" id="note"></div>
         <div class="k">リンク</div>
-        <div><a id="link" href="#" target="_blank" rel="noopener noreferrer">開く</a></div>
+        <div class="v"><a id="link" href="#" target="_blank" rel="noopener noreferrer">開く</a></div>
       </div>
     </div>
 
     <!-- データ無し表示 -->
     <div id="noData" style="display:none;">
-      <div class="row err" style="font-weight:600;">アカウント情報が見つかりませんでした</div>
+      <div class="row err" style="font-weight:700;">アカウント情報が見つかりませんでした</div>
       <div class="row muted" id="noDataMsg"></div>
       <div class="row" style="margin-top:12px;">
         <a class="btn" id="formBtn" href="#" target="_blank" rel="noopener noreferrer">登録フォームを開く</a>
@@ -97,7 +111,7 @@
     catch (e) { return { ok:false, code:"NON_JSON", message:"non-json response", raw: txt }; }
   }
 
-  // JSTで YYYY-MM-DD に整形（ISO文字列 / Date / 数値どれでも対応）
+  // JSTで YYYY-MM-DD に整形
   function formatDateJST(v) {
     if (!v) return "";
     let d;
@@ -107,7 +121,6 @@
     } catch (_) {
       return String(v);
     }
-    // IntlでAsia/Tokyoの年月日を取得
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Tokyo',
       year: 'numeric',
@@ -117,9 +130,7 @@
     const y = parts.find(p => p.type === 'year')?.value;
     const m = parts.find(p => p.type === 'month')?.value;
     const day = parts.find(p => p.type === 'day')?.value;
-    if (y && m && day) return `${y}-${m}-${day}`;
-    // フォールバック
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(d);
+    return (y && m && day) ? `${y}-${m}-${day}` : new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Tokyo' }).format(d);
   }
 
   window.onload = () => {
@@ -149,7 +160,6 @@
             return;
           }
 
-          // UIDは表示しない
           document.getElementById('content').style.display = 'block';
           document.getElementById('email').textContent = data.email || '';
           document.getElementById('account').textContent = data.record?.account_name ?? '';
