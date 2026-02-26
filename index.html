@@ -43,7 +43,7 @@
 <script>
   // ====== あなたの値（埋め込み済み）======
   const CLIENT_ID = "1047878641876-tu8l1nj5e45hjo7iavjt0i55k3ut3nve.apps.googleusercontent.com";
-  const API_URL = "https://script.google.com/macros/s/AKfycbzbiYFxxgvR2OpQCACBXhu3RE7wVy7g0FLBXy0iUHqiEaBNlGse72KEV_VrSeinTOPFig/exec";
+  const API_URL = "https://script.google.com/macros/s/AKfycbz-WzvYtjuI8hLjTL8wMYOfL42W1N5mjy5sHP2_sRC3ajDsWzRwuAX6uQAkbMVheT4OBw/exec";
   // ======================================
 
   function showError(msg){
@@ -64,7 +64,6 @@
       body: JSON.stringify({ id_token: idToken })
     });
 
-    // Apps Script がHTML等を返した場合に備えてテキストで受ける
     const txt = await res.text();
     try {
       return JSON.parse(txt);
