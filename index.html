@@ -1,0 +1,117 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Membership Ranking</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; max-width: 760px; }
+    .row { margin: 10px 0; }
+    .muted { color: #666; font-size: 12px; }
+    .err { color: #b00020; white-space: pre-wrap; }
+    .kv { display: grid; grid-template-columns: 140px 1fr; gap: 8px 12px; margin-top: 12px; }
+    .k { font-weight: 600; color: #333; }
+    pre { background:#111; color:#eee; padding:12px; border-radius:10px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <h2>Membership Ranking</h2>
+
+  <div class="card">
+    <div class="row muted" id="status">Googleでログインしてください</div>
+    <div id="gbtn" class="row"></div>
+
+    <div id="error" class="row err" style="display:none;"></div>
+
+    <div id="content" style="display:none;">
+      <div class="row kv">
+        <div class="k">Email</div><div id="email"></div>
+        <div class="k">Account</div><div id="account"></div>
+        <div class="k">UID</div><div id="uid"></div>
+        <div class="k">Rank</div><div id="rank"></div>
+        <div class="k">Score</div><div id="score"></div>
+        <div class="k">Updated</div><div id="updated"></div>
+      </div>
+
+      <div class="row muted" style="margin-top:16px;">Debug JSON</div>
+      <pre id="raw"></pre>
+    </div>
+  </div>
+
+<script>
+  // ====== あなたの値（埋め込み済み）======
+  const CLIENT_ID = "1047878641876-tu8l1nj5e45hjo7iavjt0i55k3ut3nve.apps.googleusercontent.com";
+  const API_URL = "https://script.google.com/macros/s/AKfycbzbiYFxxgvR2OpQCACBXhu3RE7wVy7g0FLBXy0iUHqiEaBNlGse72KEV_VrSeinTOPFig/exec";
+  // ======================================
+
+  function showError(msg){
+    const el = document.getElementById('error');
+    el.style.display = 'block';
+    el.textContent = msg;
+  }
+  function clearError(){
+    const el = document.getElementById('error');
+    el.style.display = 'none';
+    el.textContent = '';
+  }
+
+  async function callApi(idToken){
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({ id_token: idToken })
+    });
+
+    // Apps Script がHTML等を返した場合に備えてテキストで受ける
+    const txt = await res.text();
+    try {
+      return JSON.parse(txt);
+    } catch (e) {
+      return { ok:false, message:"API returned non-JSON response", raw: txt };
+    }
+  }
+
+  window.onload = () => {
+    google.accounts.id.initialize({
+      client_id: CLIENT_ID,
+      callback: async (resp) => {
+        clearError();
+        document.getElementById('status').textContent = '確認中...';
+        document.getElementById('content').style.display = 'none';
+
+        try {
+          const data = await callApi(resp.credential);
+          document.getElementById('status').textContent = '';
+
+          if (!data || !data.ok) {
+            showError((data && (data.message || JSON.stringify(data, null, 2))) || 'Login failed');
+            document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+
+          document.getElementById('content').style.display = 'block';
+          document.getElementById('email').textContent = data.email || '';
+          document.getElementById('account').textContent = data.record?.account_name ?? '';
+          document.getElementById('uid').textContent = data.record?.uid ?? '';
+          document.getElementById('rank').textContent = data.record?.rank ?? '';
+          document.getElementById('score').textContent = data.record?.score ?? '';
+          document.getElementById('updated').textContent = data.record?.updated_at ?? '';
+          document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
+
+        } catch (e) {
+          document.getElementById('status').textContent = '';
+          showError(String(e));
+        }
+      }
+    });
+
+    google.accounts.id.renderButton(
+      document.getElementById("gbtn"),
+      { theme: "outline", size: "large", text: "signin_with" }
+    );
+  };
+</script>
+</body>
+</html>
