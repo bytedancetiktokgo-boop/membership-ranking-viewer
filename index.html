@@ -44,7 +44,7 @@
         <div class="k">販売レベル</div><div id="salesLevel"></div>
         <div class="k">販売総額順位（同一セールスレベル内）</div><div id="salesRank"></div>
         <div class="k">次回獲得見込みメンバーシップ</div><div id="nextMembership"></div>
-        <div class="k">データ更新日</div><div id="updated"></div>
+        <div class="k">データ更新日（JST）</div><div id="updated"></div>
         <div class="k">備考</div><div id="note"></div>
         <div class="k">リンク</div>
         <div><a id="link" href="#" target="_blank" rel="noopener noreferrer">開く</a></div>
@@ -63,12 +63,8 @@
 
 <script>
   const CLIENT_ID = "1047878641876-tu8l1nj5e45hjo7iavjt0i55k3ut3nve.apps.googleusercontent.com";
-
-  // ★あなたのWorker URL（違うならここだけ修正）
-  const API_URL = "https://membership-ranking-proxy.bytedance-tiktokgo.workers.dev";
-
-  // ★ここだけ差し替え（インターナルフォームURL）
-  const FORM_URL = "https://YOUR_INTERNAL_FORM_URL";
+  const API_URL = "https://membership-ranking-proxy.bytedance-tiktokgo.workers.dev"; // Worker URL
+  const FORM_URL = "https://YOUR_INTERNAL_FORM_URL"; // ★ここだけ差し替え
 
   function showError(msg){
     const el = document.getElementById('error');
@@ -101,6 +97,31 @@
     catch (e) { return { ok:false, code:"NON_JSON", message:"non-json response", raw: txt }; }
   }
 
+  // JSTで YYYY-MM-DD に整形（ISO文字列 / Date / 数値どれでも対応）
+  function formatDateJST(v) {
+    if (!v) return "";
+    let d;
+    try {
+      d = (v instanceof Date) ? v : new Date(v);
+      if (isNaN(d.getTime())) return String(v);
+    } catch (_) {
+      return String(v);
+    }
+    // IntlでAsia/Tokyoの年月日を取得
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(d);
+    const y = parts.find(p => p.type === 'year')?.value;
+    const m = parts.find(p => p.type === 'month')?.value;
+    const day = parts.find(p => p.type === 'day')?.value;
+    if (y && m && day) return `${y}-${m}-${day}`;
+    // フォールバック
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(d);
+  }
+
   window.onload = () => {
     document.getElementById('formBtn').href = FORM_URL;
 
@@ -128,7 +149,7 @@
             return;
           }
 
-          // UIDは表示しない（触らない）
+          // UIDは表示しない
           document.getElementById('content').style.display = 'block';
           document.getElementById('email').textContent = data.email || '';
           document.getElementById('account').textContent = data.record?.account_name ?? '';
@@ -137,7 +158,7 @@
           document.getElementById('salesLevel').textContent = data.record?.sales_level ?? '';
           document.getElementById('salesRank').textContent = data.record?.sales_level_rank ?? '';
           document.getElementById('nextMembership').textContent = data.record?.next_membership ?? '';
-          document.getElementById('updated').textContent = data.record?.updated_at ?? '';
+          document.getElementById('updated').textContent = formatDateJST(data.record?.updated_at ?? '');
           document.getElementById('note').textContent = data.record?.note ?? '';
 
           const link = document.getElementById('link');
