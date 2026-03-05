@@ -7,36 +7,28 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     :root { --border:#e6e6e6; --muted:#666; --err:#b00020; }
-
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; margin: 18px; }
-    h2 { margin: 0 0 14px; font-size: 26px; line-height: 1.25; }
-    .card { border: 1px solid var(--border); border-radius: 14px; padding: 14px; max-width: 980px; background:#fff; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; margin: 14px; }
+    h2 { margin: 0 0 14px; font-size: 22px; line-height: 1.25; }
+    .card { border: 1px solid var(--border); border-radius: 14px; padding: 12px; max-width: 980px; background:#fff; }
     .row { margin: 10px 0; }
     .muted { color: var(--muted); font-size: 12px; line-height: 1.6; }
     .err { color: var(--err); white-space: pre-wrap; }
 
-    /* 2カラム（PC/タブレット） */
+    /* responsive kv */
     .kv { display: grid; grid-template-columns: minmax(180px, 320px) 1fr; gap: 10px 14px; margin-top: 12px; align-items: start; }
     .k { font-weight: 700; color: #222; }
     .v { color:#111; }
     .v, .k { word-break: break-word; overflow-wrap: anywhere; }
 
-    a.btn {
-      display: inline-block; padding: 10px 14px;
-      border: 1px solid var(--border); border-radius: 12px;
-      text-decoration: none; color: #111; background: #fff;
-    }
-    a#link { display:none; }
-
-    /* モバイルは1カラム（ラベル→値を縦並び） */
     @media (max-width: 640px) {
-      body { margin: 14px; }
-      h2 { font-size: 22px; }
-      .card { padding: 12px; }
+      h2 { font-size: 20px; }
       .kv { grid-template-columns: 1fr; gap: 6px; }
       .k { margin-top: 10px; }
       .k:first-child { margin-top: 0; }
     }
+
+    a.btn { display:inline-block; padding:10px 14px; border:1px solid var(--border); border-radius:12px; text-decoration:none; color:#111; background:#fff; }
+    a.link { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -45,27 +37,12 @@
   <div class="card">
     <div class="row muted" id="status">Googleでログインしてください</div>
     <div id="gbtn" class="row"></div>
-
     <div id="error" class="row err" style="display:none;"></div>
 
-    <!-- 正常表示 -->
     <div id="content" style="display:none;">
-      <div class="row kv">
-        <div class="k">Email</div><div class="v" id="email"></div>
-        <div class="k">アカウント名</div><div class="v" id="account"></div>
-        <div class="k">GMV（メンバーシップ計算対象の販売総額）</div><div class="v" id="gmv"></div>
-        <div class="k">投稿数（メンバーシップ計算対象）</div><div class="v" id="postNumber"></div>
-        <div class="k">販売レベル</div><div class="v" id="salesLevel"></div>
-        <div class="k">販売総額順位（同一セールスレベル内）</div><div class="v" id="salesRank"></div>
-        <div class="k">次回獲得見込みメンバーシップ</div><div class="v" id="nextMembership"></div>
-        <div class="k">データ更新日（JST）</div><div class="v" id="updated"></div>
-        <div class="k">備考</div><div class="v" id="note"></div>
-        <div class="k">リンク</div>
-        <div class="v"><a id="link" href="#" target="_blank" rel="noopener noreferrer">開く</a></div>
-      </div>
+      <div id="kv" class="row kv"></div>
     </div>
 
-    <!-- データ無し表示 -->
     <div id="noData" style="display:none;">
       <div class="row err" style="font-weight:700;">アカウント情報が見つかりませんでした</div>
       <div class="row muted" id="noDataMsg"></div>
@@ -111,26 +88,80 @@
     catch (e) { return { ok:false, code:"NON_JSON", message:"non-json response", raw: txt }; }
   }
 
-  // JSTで YYYY-MM-DD に整形
+  // JST YYYY-MM-DD
   function formatDateJST(v) {
     if (!v) return "";
     let d;
-    try {
-      d = (v instanceof Date) ? v : new Date(v);
-      if (isNaN(d.getTime())) return String(v);
-    } catch (_) {
-      return String(v);
-    }
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Tokyo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).formatToParts(d);
-    const y = parts.find(p => p.type === 'year')?.value;
-    const m = parts.find(p => p.type === 'month')?.value;
-    const day = parts.find(p => p.type === 'day')?.value;
+    try { d = (v instanceof Date) ? v : new Date(v); if (isNaN(d.getTime())) return String(v); }
+    catch (_) { return String(v); }
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Tokyo', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(d);
+    const y = parts.find(p=>p.type==='year')?.value;
+    const m = parts.find(p=>p.type==='month')?.value;
+    const day = parts.find(p=>p.type==='day')?.value;
     return (y && m && day) ? `${y}-${m}-${day}` : new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Tokyo' }).format(d);
+  }
+
+  function formatNumber(v){
+    if (v === null || v === undefined || v === "") return "";
+    const n = Number(String(v).replace(/,/g,''));
+    if (isNaN(n)) return String(v);
+    return new Intl.NumberFormat('en-US').format(n);
+  }
+
+  // 通貨は「値が数値ならJPYで整形」、文字列で$や¥が付いてたらそのまま
+  function formatCurrencyJPY(v){
+    if (v === null || v === undefined || v === "") return "";
+    const s = String(v).trim();
+    if (s.startsWith('$') || s.startsWith('¥') || s.startsWith('￥')) return s;
+    const n = Number(s.replace(/,/g,''));
+    if (isNaN(n)) return s;
+    return new Intl.NumberFormat('ja-JP', { style:'currency', currency:'JPY', maximumFractionDigits:0 }).format(n);
+  }
+
+  function renderKV(config, record) {
+    const kv = document.getElementById('kv');
+    kv.innerHTML = '';
+
+    for (const c of config) {
+      const field = c.field;
+      const label = c.label || field;
+      const fmt = (c.format || 'text').toLowerCase();
+      const emptyHide = !!c.empty_hide;
+
+      const raw = record ? record[field] : '';
+      const rawStr = (raw === null || raw === undefined) ? '' : String(raw);
+
+      if (emptyHide && rawStr.trim() === '') continue;
+
+      let display = rawStr;
+
+      if (fmt === 'date_jst') display = formatDateJST(raw);
+      else if (fmt === 'number') display = formatNumber(raw);
+      else if (fmt === 'currency') display = formatCurrencyJPY(raw);
+      else if (fmt === 'link') display = rawStr;
+
+      const k = document.createElement('div');
+      k.className = 'k';
+      k.textContent = label;
+
+      const v = document.createElement('div');
+      v.className = 'v';
+
+      if (fmt === 'link' && rawStr.trim()) {
+        const a = document.createElement('a');
+        a.className = 'link';
+        a.href = rawStr.trim();
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = '開く';
+        v.appendChild(a);
+      } else {
+        v.textContent = display;
+      }
+
+      kv.appendChild(k);
+      kv.appendChild(v);
+    }
   }
 
   window.onload = () => {
@@ -161,24 +192,10 @@
           }
 
           document.getElementById('content').style.display = 'block';
-          document.getElementById('email').textContent = data.email || '';
-          document.getElementById('account').textContent = data.record?.account_name ?? '';
-          document.getElementById('gmv').textContent = data.record?.GMV ?? '';
-          document.getElementById('postNumber').textContent = data.record?.post_number ?? '';
-          document.getElementById('salesLevel').textContent = data.record?.sales_level ?? '';
-          document.getElementById('salesRank').textContent = data.record?.sales_level_rank ?? '';
-          document.getElementById('nextMembership').textContent = data.record?.next_membership ?? '';
-          document.getElementById('updated').textContent = formatDateJST(data.record?.updated_at ?? '');
-          document.getElementById('note').textContent = data.record?.note ?? '';
 
-          const link = document.getElementById('link');
-          const url = (data.record?.link_url ?? '').trim();
-          if (url) {
-            link.href = url;
-            link.style.display = 'inline';
-          } else {
-            link.style.display = 'none';
-          }
+          // CONFIGに従って描画
+          const cfg = Array.isArray(data.config) ? data.config : [];
+          renderKV(cfg, data.record || {});
 
         } catch (e) {
           document.getElementById('status').textContent = '';
