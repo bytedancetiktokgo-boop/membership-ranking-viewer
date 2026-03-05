@@ -29,6 +29,19 @@
 
     a.btn { display:inline-block; padding:10px 14px; border:1px solid var(--border); border-radius:12px; text-decoration:none; color:#111; background:#fff; }
     a.link { text-decoration: underline; }
+    #debug {
+      margin-top: 12px;
+      padding: 10px;
+      border: 1px dashed #cfcfcf;
+      border-radius: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      color: #333;
+      background: #fafafa;
+    }
+    .debugTitle { font-weight: 700; margin-bottom: 6px; }
   </style>
 </head>
 <body>
@@ -38,6 +51,12 @@
     <div class="row muted" id="status">Googleでログインしてください</div>
     <div id="gbtn" class="row"></div>
     <div id="error" class="row err" style="display:none;"></div>
+
+    <!-- デバッグ表示（常に出す。不要になったらこのブロック削除OK） -->
+    <div id="debug">
+      <div class="debugTitle">Debug</div>
+      <div id="debugLog"></div>
+    </div>
 
     <div id="content" style="display:none;">
       <div id="kv" class="row kv"></div>
@@ -56,6 +75,12 @@
   const CLIENT_ID = "1047878641876-tu8l1nj5e45hjo7iavjt0i55k3ut3nve.apps.googleusercontent.com";
   const API_URL = "https://membership-ranking-proxy.bytedance-tiktokgo.workers.dev"; // Worker URL
   const FORM_URL = "https://YOUR_INTERNAL_FORM_URL"; // ★ここだけ差し替え
+
+  function debug(msg) {
+    const el = document.getElementById('debugLog');
+    if (!el) return;
+    el.textContent += String(msg) + "\n";
+  }
 
   function showError(msg){
     const el = document.getElementById('error');
@@ -78,27 +103,49 @@
   }
 
   async function callApi(idToken){
+    debug("[callApi] start");
     const res = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type":"application/json" },
       body: JSON.stringify({ id_token: idToken })
     });
+    debug("[callApi] http status=" + res.status);
     const txt = await res.text();
+    debug("[callApi] raw=" + txt.slice(0, 500)); // 長すぎる時のため先頭だけ
     try { return JSON.parse(txt); }
     catch (e) { return { ok:false, code:"NON_JSON", message:"non-json response", raw: txt }; }
   }
 
-  // JST YYYY-MM-DD
+  // JSTで YYYY-MM-DD に整形（Safariの "2026/2/26" 問題を回避）
   function formatDateJST(v) {
     if (!v) return "";
-    let d;
-    try { d = (v instanceof Date) ? v : new Date(v); if (isNaN(d.getTime())) return String(v); }
-    catch (_) { return String(v); }
-    const parts = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Tokyo', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(d);
+
+    const s = String(v).trim();
+
+    // yyyy/m/d or yyyy/mm/dd -> yyyy-mm-dd（JST日付として扱う）
+    const m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (m) {
+      const y = m[1];
+      const mo = String(m[2]).padStart(2, "0");
+      const d0 = String(m[3]).padStart(2, "0");
+      return `${y}-${mo}-${d0}`;
+    }
+
+    // ISO等はDateで処理してJSTに寄せる
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return s;
+
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(d);
+
     const y = parts.find(p=>p.type==='year')?.value;
-    const m = parts.find(p=>p.type==='month')?.value;
+    const mo = parts.find(p=>p.type==='month')?.value;
     const day = parts.find(p=>p.type==='day')?.value;
-    return (y && m && day) ? `${y}-${m}-${day}` : new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Tokyo' }).format(d);
+    return (y && mo && day) ? `${y}-${mo}-${day}` : s;
   }
 
   function formatNumber(v){
@@ -108,21 +155,31 @@
     return new Intl.NumberFormat('en-US').format(n);
   }
 
-  // 通貨は「値が数値ならJPYで整形」、文字列で$や¥が付いてたらそのまま
+  // 通貨：数値ならJPY表示。$や¥が付いてる文字列はそのまま。
   function formatCurrencyJPY(v){
     if (v === null || v === undefined || v === "") return "";
     const s = String(v).trim();
+    if (!s) return "";
     if (s.startsWith('$') || s.startsWith('¥') || s.startsWith('￥')) return s;
     const n = Number(s.replace(/,/g,''));
     if (isNaN(n)) return s;
     return new Intl.NumberFormat('ja-JP', { style:'currency', currency:'JPY', maximumFractionDigits:0 }).format(n);
   }
 
+  function isEmptyLike(v) {
+    const s = String(v ?? '').trim();
+    return s === '' || s === 'なし' || s.toLowerCase() === 'none' || s === '-' || s === 'null';
+  }
+
   function renderKV(config, record) {
+    debug("[renderKV] start");
     const kv = document.getElementById('kv');
     kv.innerHTML = '';
 
-    for (const c of config) {
+    debug("[renderKV] cfg length=" + (Array.isArray(config) ? config.length : 'N/A'));
+    debug("[renderKV] record keys=" + Object.keys(record || {}).join(','));
+
+    for (const c of (Array.isArray(config) ? config : [])) {
       const field = c.field;
       const label = c.label || field;
       const fmt = (c.format || 'text').toLowerCase();
@@ -131,10 +188,9 @@
       const raw = record ? record[field] : '';
       const rawStr = (raw === null || raw === undefined) ? '' : String(raw);
 
-      if (emptyHide && rawStr.trim() === '') continue;
+      if (emptyHide && isEmptyLike(rawStr)) continue;
 
       let display = rawStr;
-
       if (fmt === 'date_jst') display = formatDateJST(raw);
       else if (fmt === 'number') display = formatNumber(raw);
       else if (fmt === 'currency') display = formatCurrencyJPY(raw);
@@ -147,7 +203,7 @@
       const v = document.createElement('div');
       v.className = 'v';
 
-      if (fmt === 'link' && rawStr.trim()) {
+      if (fmt === 'link' && !isEmptyLike(rawStr)) {
         const a = document.createElement('a');
         a.className = 'link';
         a.href = rawStr.trim();
@@ -162,14 +218,29 @@
       kv.appendChild(k);
       kv.appendChild(v);
     }
+    debug("[renderKV] done");
   }
 
   window.onload = () => {
+    debug("onload ok");
+    debug("CLIENT_ID=" + CLIENT_ID);
+    debug("API_URL=" + API_URL);
+    debug("FORM_URL set?=" + (FORM_URL && !FORM_URL.includes("YOUR_INTERNAL_FORM_URL")));
+
     document.getElementById('formBtn').href = FORM_URL;
+
+    if (!window.google || !google.accounts || !google.accounts.id) {
+      debug("ERROR: google.accounts.id not available");
+      showError("Googleログインの初期化に失敗しました（gsi/client読み込み失敗）。");
+      return;
+    }
 
     google.accounts.id.initialize({
       client_id: CLIENT_ID,
       callback: async (resp) => {
+        debug("callback fired");
+        debug("credential len=" + (resp.credential ? resp.credential.length : 0));
+
         clearError();
         hideNoData();
         document.getElementById('status').textContent = '確認中...';
@@ -178,6 +249,7 @@
         try {
           const data = await callApi(resp.credential);
           document.getElementById('status').textContent = '';
+          debug("api parsed=" + JSON.stringify(data).slice(0, 600));
 
           if (!data || !data.ok) {
             if (data && data.code === 'NO_RECORD') {
@@ -192,13 +264,12 @@
           }
 
           document.getElementById('content').style.display = 'block';
-
-          // CONFIGに従って描画
           const cfg = Array.isArray(data.config) ? data.config : [];
           renderKV(cfg, data.record || {});
 
         } catch (e) {
           document.getElementById('status').textContent = '';
+          debug("ERROR: " + String(e));
           showError(String(e));
         }
       }
@@ -208,6 +279,8 @@
       document.getElementById("gbtn"),
       { theme: "outline", size: "large", text: "signin_with" }
     );
+
+    debug("renderButton ok");
   };
 </script>
 </body>
