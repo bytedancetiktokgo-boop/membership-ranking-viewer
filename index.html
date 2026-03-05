@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>TikTok GO メンバーシップ見込みステータス</title>
+  <title>TikTok GO メンバーシップ獲得ステータス</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     :root { --border:#e6e6e6; --muted:#666; --err:#b00020; }
@@ -29,19 +29,6 @@
 
     a.btn { display:inline-block; padding:10px 14px; border:1px solid var(--border); border-radius:12px; text-decoration:none; color:#111; background:#fff; }
     a.link { text-decoration: underline; }
-    #debug {
-      margin-top: 12px;
-      padding: 10px;
-      border: 1px dashed #cfcfcf;
-      border-radius: 12px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      font-size: 12px;
-      line-height: 1.5;
-      white-space: pre-wrap;
-      color: #333;
-      background: #fafafa;
-    }
-    .debugTitle { font-weight: 700; margin-bottom: 6px; }
   </style>
 </head>
 <body>
@@ -51,12 +38,6 @@
     <div class="row muted" id="status">Googleでログインしてください</div>
     <div id="gbtn" class="row"></div>
     <div id="error" class="row err" style="display:none;"></div>
-
-    <!-- デバッグ表示（常に出す。不要になったらこのブロック削除OK） -->
-    <div id="debug">
-      <div class="debugTitle">Debug</div>
-      <div id="debugLog"></div>
-    </div>
 
     <div id="content" style="display:none;">
       <div id="kv" class="row kv"></div>
@@ -75,12 +56,6 @@
   const CLIENT_ID = "1047878641876-tu8l1nj5e45hjo7iavjt0i55k3ut3nve.apps.googleusercontent.com";
   const API_URL = "https://membership-ranking-proxy.bytedance-tiktokgo.workers.dev"; // Worker URL
   const FORM_URL = "https://YOUR_INTERNAL_FORM_URL"; // ★ここだけ差し替え
-
-  function debug(msg) {
-    const el = document.getElementById('debugLog');
-    if (!el) return;
-    el.textContent += String(msg) + "\n";
-  }
 
   function showError(msg){
     const el = document.getElementById('error');
@@ -103,26 +78,23 @@
   }
 
   async function callApi(idToken){
-    debug("[callApi] start");
     const res = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type":"application/json" },
       body: JSON.stringify({ id_token: idToken })
     });
-    debug("[callApi] http status=" + res.status);
     const txt = await res.text();
-    debug("[callApi] raw=" + txt.slice(0, 500)); // 長すぎる時のため先頭だけ
     try { return JSON.parse(txt); }
     catch (e) { return { ok:false, code:"NON_JSON", message:"non-json response", raw: txt }; }
   }
 
-  // JSTで YYYY-MM-DD に整形（Safariの "2026/2/26" 問題を回避）
+  // JST YYYY-MM-DD（Safariの "2026/2/26" も安全に処理）
   function formatDateJST(v) {
     if (!v) return "";
 
     const s = String(v).trim();
 
-    // yyyy/m/d or yyyy/mm/dd -> yyyy-mm-dd（JST日付として扱う）
+    // yyyy/m/d or yyyy-mm-dd など → yyyy-mm-dd
     const m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
     if (m) {
       const y = m[1];
@@ -131,7 +103,6 @@
       return `${y}-${mo}-${d0}`;
     }
 
-    // ISO等はDateで処理してJSTに寄せる
     const d = new Date(s);
     if (isNaN(d.getTime())) return s;
 
@@ -155,7 +126,7 @@
     return new Intl.NumberFormat('en-US').format(n);
   }
 
-  // 通貨：数値ならJPY表示。$や¥が付いてる文字列はそのまま。
+  // currency：数値ならJPY。"$"や"¥"付きはそのまま。
   function formatCurrencyJPY(v){
     if (v === null || v === undefined || v === "") return "";
     const s = String(v).trim();
@@ -172,12 +143,8 @@
   }
 
   function renderKV(config, record) {
-    debug("[renderKV] start");
     const kv = document.getElementById('kv');
     kv.innerHTML = '';
-
-    debug("[renderKV] cfg length=" + (Array.isArray(config) ? config.length : 'N/A'));
-    debug("[renderKV] record keys=" + Object.keys(record || {}).join(','));
 
     for (const c of (Array.isArray(config) ? config : [])) {
       const field = c.field;
@@ -218,29 +185,24 @@
       kv.appendChild(k);
       kv.appendChild(v);
     }
-    debug("[renderKV] done");
   }
 
   window.onload = () => {
-    debug("onload ok");
-    debug("CLIENT_ID=" + CLIENT_ID);
-    debug("API_URL=" + API_URL);
-    debug("FORM_URL set?=" + (FORM_URL && !FORM_URL.includes("YOUR_INTERNAL_FORM_URL")));
-
     document.getElementById('formBtn').href = FORM_URL;
 
     if (!window.google || !google.accounts || !google.accounts.id) {
-      debug("ERROR: google.accounts.id not available");
       showError("Googleログインの初期化に失敗しました（gsi/client読み込み失敗）。");
       return;
     }
 
     google.accounts.id.initialize({
       client_id: CLIENT_ID,
-      callback: async (resp) => {
-        debug("callback fired");
-        debug("credential len=" + (resp.credential ? resp.credential.length : 0));
+      // iOS Safari / ITP 対策（安定性UP）
+      ux_mode: "popup",
+      itp_support: true,
+      cancel_on_tap_outside: false,
 
+      callback: async (resp) => {
         clearError();
         hideNoData();
         document.getElementById('status').textContent = '確認中...';
@@ -249,7 +211,6 @@
         try {
           const data = await callApi(resp.credential);
           document.getElementById('status').textContent = '';
-          debug("api parsed=" + JSON.stringify(data).slice(0, 600));
 
           if (!data || !data.ok) {
             if (data && data.code === 'NO_RECORD') {
@@ -269,7 +230,6 @@
 
         } catch (e) {
           document.getElementById('status').textContent = '';
-          debug("ERROR: " + String(e));
           showError(String(e));
         }
       }
@@ -279,8 +239,6 @@
       document.getElementById("gbtn"),
       { theme: "outline", size: "large", text: "signin_with" }
     );
-
-    debug("renderButton ok");
   };
 </script>
 </body>
